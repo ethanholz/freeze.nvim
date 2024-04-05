@@ -114,6 +114,8 @@ function freeze.freeze(start_line, end_line)
 	end
 end
 
+--- Opens the last created image in macOS using `open`.
+--- @param filename string the filename to open
 function freeze.open(filename)
 	if vim.fn.executable("open") ~= 1 then
 		vim.notify("`freeze` not found!", vim.log.levels.WARN, { title = "Freeze" })
