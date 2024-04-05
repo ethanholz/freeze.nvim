@@ -1,17 +1,15 @@
 local loop = vim.loop
-
-local home = os.getenv("HOME")
+local default_output = "freeze.png"
 
 local freeze = {
 	opts = {
+		output = default_output,
 		config = "full",
-		dir = home .. "/.config/freeze",
-		prefix = "freze-{file}",
 		open = false,
 	},
 	output = nil,
 }
-local output = { stdout = "", stderr = "" }
+local stdio = { stdout = "", stderr = "" }
 
 ---The callback for reading stdout.
 ---@param err any the possible err we received
@@ -21,7 +19,7 @@ local function onReadStdOut(err, data)
 		vim.notify(err, vim.log.levels.ERROR, { title = "Freeze" })
 	end
 	if data then
-		output.stdout = output.stdout .. data
+		stdio.stdout = stdio.stdout .. data
 	end
 	if freeze.opts.open and freeze.output ~= nil then
 		freeze.open(freeze.output)
@@ -37,7 +35,7 @@ local function onReadStdErr(err, data)
 		vim.notify(err, vim.log.levels.ERROR, { title = "Freeze" })
 	end
 	if data then
-		output.stderr = output.stderr .. data
+		stdio.stderr = stdio.stderr .. data
 	end
 end
 
@@ -50,7 +48,7 @@ local function onExit(stdout, stderr)
 		if code == 0 then
 			vim.notify("Successfully frozen 🍦", vim.log.levels.INFO, { title = "Freeze" })
 		else
-			vim.notify(output.stdout, vim.log.levels.ERROR, { title = "Freeze" })
+			vim.notify(stdio.stdout, vim.log.levels.ERROR, { title = "Freeze" })
 		end
 		stdout:read_stop()
 		stderr:read_stop()
@@ -71,24 +69,26 @@ function freeze.freeze(start_line, end_line)
 		return
 	end
 
-	-- Check if start_line and end_line are provided, otherwise use the visual selection
-	if not start_line or not end_line then
-		local startPos = vim.fn.getpos("'<")
-		local endPos = vim.fn.getpos("'>")
-		start_line = startPos[2] -- Line number of the start of the visual selection
-		end_line = endPos[2] -- Line number of the end of the visual selection
-	end
-
 	local language = vim.api.nvim_buf_get_option(0, "filetype")
 	local file = vim.api.nvim_buf_get_name(0)
-	local prefix = freeze.opts.prefix
+	local config = freeze.opts.config
 	local dir = freeze.opts.dir
-	local timestamp = os.date("%Y%m%d%H%M%S")
-	local filename = file:match("^.+/(.+)$") or file
-	local modified_prefix = prefix:gsub("{file}", filename)
-	freeze.output = dir .. "/" .. modified_prefix .. "-" .. timestamp .. ".png"
 	local stdout = loop.new_pipe(false)
 	local stderr = loop.new_pipe(false)
+	local output = freeze.opts.output
+
+	if freeze.opts.output ~= default_output then
+		local timestamp = os.date("%Y%m%d%H%M%S")
+		local filename = file:match("^.+/(.+)$") or file
+
+		output = output:gsub("{timestamp}", timestamp)
+		output = output:gsub("{filename}", filename)
+		output = output:gsub("{start_line}", start_line)
+		output = output:gsub("{end_line}", end_line)
+	end
+
+	freeze.output = dir .. "/" .. output
+
 	local handle = loop.spawn("freeze", {
 		args = {
 			"--output",
@@ -98,7 +98,7 @@ function freeze.freeze(start_line, end_line)
 			"--lines",
 			start_line .. "," .. end_line,
 			"--config",
-			freeze.opts.config,
+			config,
 			file,
 		},
 		stdio = { nil, stdout, stderr },
