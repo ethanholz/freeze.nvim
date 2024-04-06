@@ -3,7 +3,6 @@ local default_output = "freeze.png"
 
 local freeze = {
 	opts = {
-		dir = ".",
 		output = default_output,
 		config = "full",
 		open = false,
@@ -119,7 +118,7 @@ end
 --- @param filename string the filename to open
 function freeze.open(filename)
 	if vim.fn.executable("open") ~= 1 then
-		vim.notify("`freeze` not found!", vim.log.levels.WARN, { title = "Freeze" })
+		vim.notify("`open` not found!", vim.log.levels.WARN, { title = "Freeze" })
 		return
 	end
 
