@@ -3,8 +3,9 @@ local default_output = "freeze.png"
 
 local freeze = {
 	opts = {
+		dir = ".",
 		output = default_output,
-		config = "full",
+		config = "base",
 		open = false,
 	},
 	output = nil,
