@@ -3,13 +3,13 @@ local default_output = "freeze.png"
 
 local freeze = {
 	opts = {
-		dir = ".",
 		output = default_output,
+		dir = "."
 		config = "base",
-		open = false,
 	},
 	output = nil,
 }
+
 local stdio = { stdout = "", stderr = "" }
 
 ---The callback for reading stdout.
@@ -22,10 +22,20 @@ local function onReadStdOut(err, data)
 	if data then
 		stdio.stdout = stdio.stdout .. data
 	end
-	if freeze.opts.open and freeze.output ~= nil then
-		freeze.open(freeze.output)
-		freeze.output = nil
+
+	if freeze.output == nil then
+		return
 	end
+
+	if freeze.opts.action == "open" then
+		freeze.open(freeze.output)
+	end
+
+	if freeze.opts.action == "copy" then
+		freeze.copy(freeze.output)
+	end
+
+	freeze.output = nil
 end
 
 ---The callback for reading stderr.
@@ -41,13 +51,14 @@ local function onReadStdErr(err, data)
 end
 
 ---The function called on exit of from the event loop
+---@param message string the success message to render
 ---@param stdout any the stdout pipe used by vim.loop
 ---@param stderr any the stderr pipe used by vim.loop
 ---@return function cb the wrapped schedule function callback
-local function onExit(stdout, stderr)
+local function onExit(message, stdout, stderr)
 	return vim.schedule_wrap(function(code, _)
 		if code == 0 then
-			vim.notify("Successfully frozen 🍦", vim.log.levels.INFO, { title = "Freeze" })
+			vim.notify(message, vim.log.levels.INFO, { title = "Freeze" })
 		else
 			vim.notify(stdio.stdout, vim.log.levels.ERROR, { title = "Freeze" })
 		end
@@ -66,7 +77,9 @@ end
 --- @param end_line number the ending line to pass to freeze
 function freeze.freeze(start_line, end_line)
 	if vim.fn.executable("freeze") ~= 1 then
-		vim.notify("`freeze` not found!", vim.log.levels.WARN, { title = "Freeze" })
+		vim.schedule(function()
+			vim.notify("`freeze` not found!", vim.log.levels.WARN, { title = "Freeze" })
+		end)
 		return
 	end
 
@@ -103,7 +116,7 @@ function freeze.freeze(start_line, end_line)
 			file,
 		},
 		stdio = { nil, stdout, stderr },
-	}, onExit(stdout, stderr))
+	}, onExit("Successfully frozen 🍦 to " .. freeze.output, stdout, stderr))
 	if not handle then
 		vim.notify("Failed to spawn freeze", vim.log.levels.ERROR, { title = "Freeze" })
 	end
@@ -119,7 +132,9 @@ end
 --- @param filename string the filename to open
 function freeze.open(filename)
 	if vim.fn.executable("open") ~= 1 then
-		vim.notify("`open` not found!", vim.log.levels.WARN, { title = "Freeze" })
+		vim.schedule(function()
+			vim.notify("`open` not found!", vim.log.levels.WARN, { title = "Freeze" })
+		end)
 		return
 	end
 
@@ -130,7 +145,47 @@ function freeze.open(filename)
 			filename,
 		},
 		stdio = { nil, stdout, stderr },
-	}, onExit(stdout, stderr))
+	}, onExit("Opened file using `open`", stdout, stderr))
+	if not handle then
+		vim.notify("Failed to spawn freeze", vim.log.levels.ERROR, { title = "Freeze" })
+	end
+	if stdout ~= nil then
+		loop.read_start(stdout, onReadStdOut)
+	end
+	if stderr ~= nil then
+		loop.read_start(stderr, onReadStdErr)
+	end
+end
+
+--- Copy the last created image in macOS using `open`.
+--- @param filename string the filename to open
+function freeze.copy(filename)
+	if vim.fn.executable("copy") ~= 1 then
+		vim.schedule(function()
+			vim.notify("`copy` not found!", vim.log.levels.WARN, { title = "Freeze" })
+			vim.notify("Consider adding the following script on your path:", vim.log.levels.WARN, { title = "Freeze" })
+			vim.notify("", vim.log.levels.WARN, { title = "Freeze" })
+			vim.notify("```bash", vim.log.levels.WARN, { title = "Freeze" })
+			vim.notify("#!/usr/bin/env bash", vim.log.levels.WARN, { title = "Freeze" })
+			vim.notify("", vim.log.levels.WARN, { title = "Freeze" })
+			vim.notify(
+				"osascript -e{'on run{a}','set the clipboard to posix file a',end} \"$(greadlink -f -- \"$1\")\"; ",
+				vim.log.levels.WARN,
+				{ title = "Freeze" }
+			)
+			vim.notify("```", vim.log.levels.WARN, { title = "Freeze" })
+		end)
+		return
+	end
+
+	local stdout = loop.new_pipe(false)
+	local stderr = loop.new_pipe(false)
+	local handle = loop.spawn("copy", {
+		args = {
+			filename,
+		},
+		stdio = { nil, stdout, stderr },
+	}, onExit("Copy frozen frame to the clipboard", stdout, stderr))
 	if not handle then
 		vim.notify("Failed to spawn freeze", vim.log.levels.ERROR, { title = "Freeze" })
 	end
