@@ -5,6 +5,7 @@ local freeze = {
 	opts = {
 		dir = ".",
 		output = default_output,
+		theme = "default",
 		config = "base",
 		open = false,
 	},
@@ -100,6 +101,8 @@ function freeze.freeze(start_line, end_line)
 			start_line .. "," .. end_line,
 			"--config",
 			config,
+			"--theme",
+			freeze.opts.theme,
 			file,
 		},
 		stdio = { nil, stdout, stderr },
