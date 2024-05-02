@@ -13,6 +13,9 @@ local freeze = {
 }
 local stdio = { stdout = "", stderr = "" }
 
+local freeze_path = vim.fn.exepath("freeze")
+local freeze_version = "0.1.6"
+
 ---The callback for reading stdout.
 ---@param err any the possible err we received
 ---@param data any the possible data we received in stdout
@@ -59,6 +62,171 @@ local function onExit(stdout, stderr)
 	end)
 end
 
+-- Get the filename for the release (e.g. freeze_<version>_<os>_<arch>)
+---@return string
+local function get_freeze_filename()
+	local os, arch
+
+	local raw_os = vim.loop.os_uname().sysname
+	local raw_arch = jit.arch
+	local os_patterns = {
+		["Windows"] = "Windows",
+		["Windows_NT"] = "Windows",
+		["Linux"] = "Linux",
+		["Darwin"] = "Darwin",
+		["BSD"] = "Freebsd",
+	}
+
+	local arch_patterns = {
+		["x86"] = "i386",
+		["x64"] = "x86_64",
+		["arm"] = "arm7",
+		["arm64"] = "arm64",
+	}
+
+	os = os_patterns[raw_os]
+	arch = arch_patterns[raw_arch]
+
+	if os == nil or arch == nil then
+		vim.notify("os not supported or could not be parsed", vim.log.levels.ERROR, { title = "Freeze" })
+		return ""
+	end
+	local filename = "freeze_" .. freeze_version .. "_" .. os .. "_" .. arch
+	return filename
+end
+
+---Get the release archive file extension depending on OS
+---@return string extension
+local function get_archive_extension()
+	local os, arch
+
+	-- local raw_os = jit.os
+	local raw_os = vim.loop.os_uname().sysname
+	local raw_arch = jit.arch
+	local os_patterns = {
+		["Windows"] = "Windows",
+		["Windows_NT"] = "Windows",
+		["Linux"] = "Linux",
+		["Darwin"] = "Darwin",
+		["BSD"] = "Freebsd",
+	}
+
+	local arch_patterns = {
+		["x86"] = "i386",
+		["x64"] = "x86_64",
+		["arm"] = "arm7",
+		["arm64"] = "arm64",
+	}
+
+	os = os_patterns[raw_os]
+	arch = arch_patterns[raw_arch]
+
+	return (os == "Windows" and ".zip" or ".tar.gz")
+end
+
+---Get the release file for the right OS and Architecture from official release
+---page, https://github.com/charmbracelet/freeze/releases, for the specified version
+---@return string release_url
+local function release_file_url()
+	-- check pre-existence of required programs
+	if vim.fn.executable("curl") == 0 or vim.fn.executable("tar") == 0 then
+		vim.notify("curl and/or tar are required", vim.log.levels.ERROR, { title = "Freeze" })
+		return ""
+	end
+
+	local filename = get_freeze_filename() .. get_archive_extension()
+
+	-- create the url, filename based on os and arch
+	return "https://github.com/charmbracelet/freeze/releases/download/v" .. freeze_version .. "/" .. filename
+end
+
+local function agnostic_installation()
+	local release_url = release_file_url()
+	if release_url == "" then
+		vim.notify("could not get release file", vim.log.levels.ERROR, { title = "Freeze" })
+		return
+	end
+
+	local install_path = os.getenv("HOME") .. "/.local/bin"
+	local output_filename = "freeze.tar.gz"
+	local download_command = { "curl", "-sL", "-o", output_filename, release_url }
+	local extract_command = { "tar", "-zxf", output_filename, "-C", install_path }
+	local binary_path = vim.fn.expand(table.concat({ install_path, get_freeze_filename() .. "/freeze" }, "/"))
+
+	-- check for existing files / folders
+	if vim.fn.isdirectory(install_path) == 0 then
+		vim.loop.fs_mkdir(install_path, tonumber("777", 8))
+	end
+
+	if vim.fn.filereadable(binary_path) == 1 then
+		local success = vim.loop.fs_unlink(binary_path)
+		if not success then
+			vim.notify("freeze binary could not be removed!", vim.log.levels.ERROR, { tittle = "Freeze" })
+			return
+		end
+	end
+
+	-- download and install the freeze binary
+	local callbacks = {
+		on_sterr = vim.schedule_wrap(function(_, data, _)
+			local out = table.concat(data, "\n")
+			onReadStdErr(out)
+		end),
+		on_exit = vim.schedule_wrap(function()
+			vim.fn.system(extract_command)
+			-- remove the archive after completion
+			if vim.fn.filereadable(output_filename) == 1 then
+				local success = vim.loop.fs_unlink(output_filename)
+				if not success then
+					vim.notify("existing archive could not be removed", vim.log.levels.ERROR, { tittle = "Freeze" })
+					return
+				end
+			end
+			loop.spawn("mv", { args = { binary_path, install_path .. "/freeze" } })
+			binary_path = install_path .. "/freeze"
+			freeze_path = binary_path
+			freeze.setup(freeze.opts)
+			loop.spawn("rm", { args = { "-rf", install_path .. "/" .. get_freeze_filename() } })
+		end),
+	}
+	vim.fn.jobstart(download_command, callbacks)
+end
+
+---Freeze installation using `go install`
+local function go_installation()
+	vim.fn.jobstart({ "go", "install", "github.com/charmbracelet/freeze@latest" }, {
+		on_sterr = vim.schedule_wrap(function(_, data, _)
+			local out = table.concat(data, "\n")
+			onReadStdErr(out)
+		end),
+		on_exit = vim.schedule_wrap(function()
+			vim.notify(
+				"go install github.com/charmbracelet/freeze@latest completed",
+				vim.log.levels.INFO,
+				{ title = "Freeze" }
+			)
+		end),
+	})
+end
+
+---Freeze installation process
+---
+---Using `go` if it is installed, otherwise, using the release URL download
+local function install_freeze()
+	if vim.fn.exepath("go") ~= "" then
+		go_installation()
+		return
+	end
+	agnostic_installation()
+end
+
+local function get_executable()
+	if freeze_path ~= "" then
+		return freeze_path
+	end
+	return vim.fn.exepath("freeze")
+end
+
 --- The main function used for passing the main config to lua
 ---
 --- This function will take your lines and the found Vim filetype and pass it
@@ -66,7 +234,7 @@ end
 --- @param start_line number the starting line to pass to freeze
 --- @param end_line number the ending line to pass to freeze
 function freeze.freeze(start_line, end_line)
-	if vim.fn.executable("freeze") ~= 1 then
+	if get_executable() == "" then
 		vim.notify("`freeze` not found!", vim.log.levels.WARN, { title = "Freeze" })
 		return
 	end
@@ -163,6 +331,11 @@ function freeze.setup(plugin_opts)
 		local line = vim.api.nvim_win_get_cursor(0)[1]
 		freeze.freeze(line, line)
 	end, {})
+	if get_executable() == "" then
+		vim.notify("installing `freeze` ...", vim.log.levels.INFO, { title = "Freeze" })
+		install_freeze()
+		return
+	end
 end
 
 return freeze
