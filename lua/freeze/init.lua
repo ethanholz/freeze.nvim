@@ -179,23 +179,19 @@ local function copy_macos(filename)
 	os.execute(table.concat(cmd, " "))
 end
 
----Copy command for Unix OS
+---Copy command for Mac OS
 ---@param filename string
-local function copy_unix(filename)
-	if vim.fn.exepath("xclip") == "" then
-		vim.notify("`xclip` is not installed", vim.log.levels.ERROR, { title = "Freeze" })
+local function copy_macos(filename)
+	if vim.fn.executable("xclip") == 1 then
+		copy_unix(filename)
 		return
 	end
 	local cmd = {
-		"xclip",
-		"-selection",
-		"clipboard",
-		"-t",
-		"image/png",
-		"-i",
-		filename,
+		"osascript",
+		"-e",
+		"'set the clipboard to (read (POSIX file \"" .. filename .. "\") as JPEG picture)'",
 	}
-  os.execute(table.concat(cmd, " "))
+	os.execute(table.concat(cmd, " "))
 end
 
 ---Copy the frozen frame to the clipboard
