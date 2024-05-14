@@ -172,7 +172,7 @@ end
 ---@param filename string
 local function copy_unix(filename)
 	local cmd = {}
-  -- echo $XDG_SESSION_TYPE should show `x11` for X11 systems and `wayland` for Wayland systems
+	-- echo $XDG_SESSION_TYPE should show `x11` for X11 systems and `wayland` for Wayland systems
 	if vim.env.XDG_SESSION_TYPE == "wayland" then
 		if vim.fn.exepath("wl-copy") == "" then
 			vim.notify("`wl-copy` is not installed", vim.log.levels.ERROR, { title = "Freeze" })
