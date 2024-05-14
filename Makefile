@@ -12,4 +12,4 @@ lint-all: lint style-lint
 
 format:
 	@printf "\nFormatting with stylua\n"
-	@stylua --color always
+	@stylua --color always .
