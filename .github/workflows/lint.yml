@@ -1,0 +1,42 @@
+name: lint
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "lua/**/*.lua"
+  pull_request:
+    types: [opened, synchronize]
+    branches:
+      - main
+    paths:
+      - "lua/**/*.lua"
+
+jobs:
+  lint:
+    name: Selene check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+
+      - name: Run selene
+        uses: NTBBloodbath/selene-action@v1.0.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          args: --display-style quiet lua/freeze
+
+  style-lint:
+    name: Stylua check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+
+      - name: Lint with stylua
+        uses: JohnnyMorganz/stylua-action@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          version: latest
+          args: --color always --check .
