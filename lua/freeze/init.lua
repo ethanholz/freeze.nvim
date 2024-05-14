@@ -3,7 +3,7 @@ local default_output = "freeze.png"
 
 local freeze = {
 	opts = {
-		dir = ".",
+		dir = vim.env.PWD,
 		output = default_output,
 		theme = "default",
 		config = "base",
@@ -24,14 +24,6 @@ local function onReadStdOut(err, data)
 	if data then
 		stdio.stdout = stdio.stdout .. data
 	end
-	if freeze.opts.open and freeze.output ~= nil then
-		freeze.open(freeze.output)
-		freeze.output = nil
-	end
-	if freeze.opts.copy and freeze.output ~= nil then
-		freeze.copy(freeze.output)
-		freeze.output = nil
-	end
 end
 
 ---The callback for reading stderr.
@@ -46,6 +38,17 @@ local function onReadStdErr(err, data)
 	end
 end
 
+local function handleActions()
+	if freeze.opts.open and freeze.output ~= nil then
+		freeze.open(freeze.output)
+	end
+	if freeze.opts.copy and freeze.output ~= nil then
+		freeze.copy(freeze.output)
+		local msg = string.format("frozen frame `%s` has been copied to the clipboard", freeze.output)
+		vim.notify(msg, vim.log.levels.INFO, { title = "Freeze" })
+	end
+end
+
 ---The function called on exit of from the event loop
 ---@param stdout any the stdout pipe used by vim.loop
 ---@param stderr any the stderr pipe used by vim.loop
@@ -57,6 +60,8 @@ local function onExit(stdout, stderr)
 		else
 			vim.notify(stdio.stdout, vim.log.levels.ERROR, { title = "Freeze" })
 		end
+		handleActions()
+		freeze.output = nil -- resetting the `output` value
 		stdout:read_stop()
 		stderr:read_stop()
 		stdout:close()
@@ -95,6 +100,7 @@ function freeze.freeze(start_line, end_line)
 	end
 
 	freeze.output = dir .. "/" .. output
+	freeze.output = vim.fn.expand(freeze.output)
 
 	local handle = loop.spawn("freeze", {
 		args = {
@@ -157,23 +163,9 @@ local function copy_windows(filename)
 		"Add-Type",
 		"-AssemblyName",
 		"System.Windows.Forms;",
-		'[Windows.Forms.Clipboard]::SetImage($([System.Drawing.Image]::FromFile("'
-			.. loop.cwd()
-			.. "/"
-			.. filename
-			.. '")))',
+		'[Windows.Forms.Clipboard]::SetImage($([System.Drawing.Image]::FromFile("' .. filename .. '")))',
 	}
-	local callback = {
-		on_sterr = vim.schedule_wrap(function(_, data, _)
-			local out = table.concat(data, "\n")
-			onReadStdErr(out)
-		end),
-		on_exit = vim.schedule_wrap(function()
-			vim.notify("frozen frame has been copied to the clipboard", vim.log.levels.INFO, { title = "Freeze" })
-		end),
-	}
-	local job = vim.fn.jobstart(cmd, callback)
-	vim.fn.jobstop(job)
+	os.execute(table.concat(cmd, " "))
 end
 
 ---Copy command for Mac OS
@@ -182,26 +174,16 @@ local function copy_macos(filename)
 	local cmd = {
 		"osascript",
 		"-e",
-		"'set the clipboad to (read (POSIX file \"" .. loop.cwd() .. "/" .. filename .. "\") as JPEG picture)'",
+		"'set the clipboard to (read (POSIX file \"" .. filename .. "\") as JPEG picture)'",
 	}
-	local callback = {
-		on_sterr = vim.schedule_wrap(function(_, data, _)
-			local out = table.concat(data, "\n")
-			onReadStdErr(out)
-		end),
-		on_exit = vim.schedule_wrap(function()
-			vim.notify("frozen frame has been copied to the clipboard", vim.log.levels.INFO, { title = "Freeze" })
-		end),
-	}
-	local job = vim.fn.jobstart(cmd, callback)
-	vim.fn.jobstop(job)
+	os.execute(table.concat(cmd, " "))
 end
 
 ---Copy command for Unix OS
 ---@param filename string
 local function copy_unix(filename)
 	if vim.fn.exepath("xclip") == "" then
-		vim.notify("`xclip` is not installed", vim.log.level.ERROR, { title = "Freeze" })
+		vim.notify("`xclip` is not installed", vim.log.levels.ERROR, { title = "Freeze" })
 		return
 	end
 	local cmd = {
@@ -211,19 +193,9 @@ local function copy_unix(filename)
 		"-t",
 		"image/png",
 		"-i",
-		loop.cwd() .. "/" .. filename,
+		filename,
 	}
-	local callback = {
-		on_sterr = vim.schedule_wrap(function(_, data, _)
-			local out = table.concat(data, "\n")
-			onReadStdErr(out)
-		end),
-		on_exit = vim.schedule_wrap(function()
-			vim.notify("frozen frame has been copied to the clipboard", vim.log.levels.INFO, { title = "Freeze" })
-		end),
-	}
-	local job = vim.fn.jobstart(cmd, callback)
-	vim.fn.jobstop(job)
+  os.execute(table.concat(cmd, " "))
 end
 
 ---Copy the frozen frame to the clipboard
@@ -233,8 +205,10 @@ function freeze.copy(filename)
 
 	if os == "Windows" or os == "Window_NT" then
 		copy_windows(filename)
+		return
 	elseif os == "Darwin" then
 		copy_macos(filename)
+		return
 	end
 	copy_unix(filename)
 end
