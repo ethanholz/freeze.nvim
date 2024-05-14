@@ -152,17 +152,6 @@ function freeze.setup(plugin_opts)
 	for k, v in pairs(plugin_opts) do
 		freeze.opts[k] = v
 	end
-	vim.api.nvim_create_user_command("Freeze", function(opts)
-		if opts.count > 0 then
-			freeze.freeze(opts.line1, opts.line2)
-		else
-			freeze.freeze(1, vim.api.nvim_buf_line_count(0))
-		end
-	end, { range = true })
-	vim.api.nvim_create_user_command("FreezeLine", function(_)
-		local line = vim.api.nvim_win_get_cursor(0)[1]
-		freeze.freeze(line, line)
-	end, {})
 end
 
 return freeze
