@@ -168,14 +168,36 @@ local function copy_windows(filename)
 	os.execute(table.concat(cmd, " "))
 end
 
----Copy command for Mac OS
+---Copy command for Unix OS
 ---@param filename string
-local function copy_macos(filename)
-	local cmd = {
-		"osascript",
-		"-e",
-		"'set the clipboard to (read (POSIX file \"" .. filename .. "\") as JPEG picture)'",
-	}
+local function copy_unix(filename)
+	local cmd = {}
+  -- echo $XDG_SESSION_TYPE should show `x11` for X11 systems and `wayland` for Wayland systems
+	if vim.env.XDG_SESSION_TYPE == "wayland" then
+		if vim.fn.exepath("wl-copy") == "" then
+			vim.notify("`wl-copy` is not installed", vim.log.levels.ERROR, { title = "Freeze" })
+			return
+		end
+		cmd = {
+			"wl-copy",
+			"<",
+			filename,
+		}
+	else
+		if vim.fn.exepath("xclip") == "" then
+			vim.notify("`xclip` is not installed", vim.log.levels.ERROR, { title = "Freeze" })
+			return
+		end
+		cmd = {
+			"xclip",
+			"-selection",
+			"clipboard",
+			"-t",
+			"image/png",
+			"-i",
+			filename,
+		}
+	end
 	os.execute(table.concat(cmd, " "))
 end
 
