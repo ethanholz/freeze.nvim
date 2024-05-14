@@ -3,7 +3,7 @@ local default_output = "freeze.png"
 
 local freeze = {
 	opts = {
-		dir = ".",
+		dir = vim.env.PWD,
 		output = default_output,
 		theme = "default",
 		config = "base",
@@ -63,13 +63,15 @@ end
 ---
 --- This function will take your lines and the found Vim filetype and pass it
 --- to `freeze --language <vim filetype> --lines <start_line>,<end_line> <file>`
---- @param start_line number the starting line to pass to freeze
---- @param end_line number the ending line to pass to freeze
+--- @param start_line number|nil the starting line to pass to freeze
+--- @param end_line number|nil the ending line to pass to freeze
 function freeze.freeze(start_line, end_line)
 	if vim.fn.executable("freeze") ~= 1 then
 		vim.notify("`freeze` not found!", vim.log.levels.WARN, { title = "Freeze" })
 		return
 	end
+	start_line = start_line or 1
+	end_line = end_line or vim.api.nvim_buf_line_count(0)
 
 	local language = vim.api.nvim_buf_get_option(0, "filetype")
 	local file = vim.api.nvim_buf_get_name(0)
@@ -149,14 +151,12 @@ end
 --- Sets up :Freeze for freezing a selection and :FreezeLine
 --- to freeze a single line.
 function freeze.setup(plugin_opts)
-	for k, v in pairs(plugin_opts) do
-		freeze.opts[k] = v
-	end
+	freeze.opts = vim.tbl_extend("force", {}, freeze.opts, plugin_opts or {})
 	vim.api.nvim_create_user_command("Freeze", function(opts)
 		if opts.count > 0 then
 			freeze.freeze(opts.line1, opts.line2)
 		else
-			freeze.freeze(1, vim.api.nvim_buf_line_count(0))
+			freeze.freeze()
 		end
 	end, { range = true })
 	vim.api.nvim_create_user_command("FreezeLine", function(_)
