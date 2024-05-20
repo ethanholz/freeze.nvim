@@ -71,7 +71,12 @@ function freeze.freeze(start_line, end_line)
 		return
 	end
 
-	local language = vim.api.nvim_buf_get_option(0, "filetype")
+  local language = ""
+  if vim.version().minor >= 10 then
+    language = vim.api.nvim_get_option_value("filetype", { scope = "local", buf = vim.api.nvim_get_current_buf() })
+  else
+	  language = vim.api.nvim_buf_get_option(0, "filetype")
+  end
 	local file = vim.api.nvim_buf_get_name(0)
 	local config = freeze.opts.config
 	local dir = freeze.opts.dir
