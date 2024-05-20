@@ -73,7 +73,7 @@ function freeze.freeze(start_line, end_line)
 
   local language = ""
   if vim.version().minor >= 10 then
-    language = vim.api.nvim_get_option_value("filetype", { scope = "local", buf = vim.api.nvim_get_current_buf() })
+    language = vim.api.nvim_get_option_value("filetype", { buf = vim.api.nvim_get_current_buf() })
   else
 	  language = vim.api.nvim_buf_get_option(0, "filetype")
   end
