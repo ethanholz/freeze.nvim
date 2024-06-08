@@ -44,6 +44,10 @@ local function handleActions()
 	end
 	if freeze.opts.copy and freeze.output ~= nil then
 		freeze.copy(freeze.output)
+    if vim.v.shell_error ~= 0 then
+      vim.notify("Failed to copy to clipboard", vim.log.levels.ERROR, { title = "Freeze" })
+      return
+    end
 		local msg = string.format("frozen frame `%s` has been copied to the clipboard", freeze.output)
 		vim.notify(msg, vim.log.levels.INFO, { title = "Freeze" })
 	end
@@ -165,7 +169,7 @@ local function copy_windows(filename)
 		"System.Windows.Forms;",
 		'[Windows.Forms.Clipboard]::SetImage($([System.Drawing.Image]::FromFile("' .. filename .. '")))',
 	}
-	os.execute(table.concat(cmd, " "))
+	vim.fn.system(cmd)
 end
 
 ---Copy command for Unix OS
@@ -198,7 +202,7 @@ local function copy_unix(filename)
 			filename,
 		}
 	end
-	os.execute(table.concat(cmd, " "))
+	vim.fn.system(cmd)
 end
 
 ---Copy command for Mac OS
@@ -211,9 +215,9 @@ local function copy_macos(filename)
 	local cmd = {
 		"osascript",
 		"-e",
-		"'set the clipboard to (read (POSIX file \"" .. filename .. "\") as JPEG picture)'",
+		'set the clipboard to (read (POSIX file "' .. filename .. '") as {«class PNGf»})',
 	}
-	os.execute(table.concat(cmd, " "))
+	vim.fn.system(cmd)
 end
 
 ---Copy the frozen frame to the clipboard
