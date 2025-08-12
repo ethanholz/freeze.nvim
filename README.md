@@ -1,4 +1,7 @@
 # freeze.nvim
+THIS TOOL IS NO LONGER MAINTAINED AND I RECOMMEND [this iteration](https://github.com/charm-and-friends/freeze.nvim/tree/main) instead.
+---
+
 A tool for using [freeze](https://github.com/charmbracelet/freeze) right from Neovim!
 
 ## Requirements
