@@ -3,11 +3,12 @@ local default_output = "freeze.png"
 
 local freeze = {
 	opts = {
-		dir = ".",
+		dir = vim.env.PWD,
 		output = default_output,
 		theme = "default",
 		config = "base",
 		open = false,
+		copy = false,
 	},
 	output = nil,
 }
@@ -23,10 +24,6 @@ local function onReadStdOut(err, data)
 	if data then
 		stdio.stdout = stdio.stdout .. data
 	end
-	if freeze.opts.open and freeze.output ~= nil then
-		freeze.open(freeze.output)
-		freeze.output = nil
-	end
 end
 
 ---The callback for reading stderr.
@@ -41,6 +38,21 @@ local function onReadStdErr(err, data)
 	end
 end
 
+local function handleActions()
+	if freeze.opts.open and freeze.output ~= nil then
+		freeze.open(freeze.output)
+	end
+	if freeze.opts.copy and freeze.output ~= nil then
+		freeze.copy(freeze.output)
+    if vim.v.shell_error ~= 0 then
+      vim.notify("Failed to copy to clipboard", vim.log.levels.ERROR, { title = "Freeze" })
+      return
+    end
+		local msg = string.format("frozen frame `%s` has been copied to the clipboard", freeze.output)
+		vim.notify(msg, vim.log.levels.INFO, { title = "Freeze" })
+	end
+end
+
 ---The function called on exit of from the event loop
 ---@param stdout any the stdout pipe used by vim.loop
 ---@param stderr any the stderr pipe used by vim.loop
@@ -48,10 +60,12 @@ end
 local function onExit(stdout, stderr)
 	return vim.schedule_wrap(function(code, _)
 		if code == 0 then
-			vim.notify("Successfully frozen 🍦", vim.log.levels.INFO, { title = "Freeze" })
+			vim.notify("Successfully frozen 🍦 " .. freeze.opts.output, vim.log.levels.INFO, { title = "Freeze" })
 		else
 			vim.notify(stdio.stdout, vim.log.levels.ERROR, { title = "Freeze" })
 		end
+		handleActions()
+		freeze.output = nil -- resetting the `output` value
 		stdout:read_stop()
 		stderr:read_stop()
 		stdout:close()
@@ -95,6 +109,7 @@ function freeze.freeze(start_line, end_line)
 	end
 
 	freeze.output = dir .. "/" .. output
+	freeze.output = vim.fn.expand(freeze.output)
 
 	local handle = loop.spawn("freeze", {
 		args = {
@@ -148,6 +163,81 @@ function freeze.open(filename)
 	if stderr ~= nil then
 		loop.read_start(stderr, onReadStdErr)
 	end
+end
+
+---Copy command for Windows OS
+---@param filename string
+local function copy_windows(filename)
+	local cmd = {
+		"Add-Type",
+		"-AssemblyName",
+		"System.Windows.Forms;",
+		'[Windows.Forms.Clipboard]::SetImage($([System.Drawing.Image]::FromFile("' .. filename .. '")))',
+	}
+	vim.fn.system(cmd)
+end
+
+---Copy command for Unix OS
+---@param filename string
+local function copy_unix(filename)
+	local cmd = {}
+	-- echo $XDG_SESSION_TYPE should show `x11` for X11 systems and `wayland` for Wayland systems
+	if vim.env.XDG_SESSION_TYPE == "wayland" then
+		if vim.fn.exepath("wl-copy") == "" then
+			vim.notify("`wl-copy` is not installed", vim.log.levels.ERROR, { title = "Freeze" })
+			return
+		end
+		cmd = {
+			"wl-copy",
+			"<",
+			filename,
+		}
+	else
+		if vim.fn.exepath("xclip") == "" then
+			vim.notify("`xclip` is not installed", vim.log.levels.ERROR, { title = "Freeze" })
+			return
+		end
+		cmd = {
+			"xclip",
+			"-selection",
+			"clipboard",
+			"-t",
+			"image/png",
+			"-i",
+			filename,
+		}
+	end
+	vim.fn.system(cmd)
+end
+
+---Copy command for Mac OS
+---@param filename string
+local function copy_macos(filename)
+	if vim.fn.executable("xclip") == 1 then
+		copy_unix(filename)
+		return
+	end
+	local cmd = {
+		"osascript",
+		"-e",
+		'set the clipboard to (read (POSIX file "' .. filename .. '") as {«class PNGf»})',
+	}
+	vim.fn.system(cmd)
+end
+
+---Copy the frozen frame to the clipboard
+---@param filename string
+function freeze.copy(filename)
+	local os = vim.loop.os_uname().sysname
+
+	if os == "Windows" or os == "Window_NT" then
+		copy_windows(filename)
+		return
+	elseif os == "Darwin" then
+		copy_macos(filename)
+		return
+	end
+	copy_unix(filename)
 end
 
 --- Setup function for enabling both user commands.
